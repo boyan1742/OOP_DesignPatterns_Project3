@@ -12,14 +12,7 @@ public sealed class MasterControl
         m_operationLogic = algorithm == Algorithms.Algorithms.None
             ? new VerificationLogic(path, checksums)
             : new CalculationLogic(path, algorithm, format);
-        
-        EventMaster.Bind("pause", new EventListener("masterControl.pause", PauseListener));
     }
 
     public void Start() => new Thread(() => m_operationLogic.Start()).Start();
-
-    private void PauseListener(IEvent @event)
-    {
-        Console.WriteLine("[MasterControl] Pause received!");
-    }
 }

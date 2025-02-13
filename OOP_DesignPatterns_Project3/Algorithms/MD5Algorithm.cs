@@ -9,6 +9,7 @@ public class MD5Algorithm : IChecksumAlgorithm
 {
     private readonly string m_callerID;
     private bool m_shouldExit = false;
+    private bool m_pause = false;
 
     private bool m_shouldWaitForKeypress = false;
 
@@ -18,9 +19,13 @@ public class MD5Algorithm : IChecksumAlgorithm
 
         EventMaster.Bind(EventMaster.EVENT_ID_EXIT,
             new EventListener($"{EventMaster.EVENT_ID_EXIT}.md5Alg", ExitListener));
+        
+        EventMaster.Bind(EventMaster.EVENT_ID_PAUSE,
+            new EventListener($"{EventMaster.EVENT_ID_PAUSE}.md5Alg", PauseListener));
     }
 
     private void ExitListener(IEvent @event) => m_shouldExit = true;
+    private void PauseListener(IEvent @event) => m_pause = !m_pause;
 
     public void SetWaitForKeypress(bool value) => m_shouldWaitForKeypress = value;
 
@@ -35,7 +40,7 @@ public class MD5Algorithm : IChecksumAlgorithm
 
         while ((bytesRead = fileStream.Read(buffer, 0, (int) Math.Min(buffer.LongLength, fileLength))) > 0)
         {
-            if (m_shouldExit)
+            if (m_shouldExit || m_pause)
                 return "0";
 
             if(m_shouldWaitForKeypress)

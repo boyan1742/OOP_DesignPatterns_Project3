@@ -12,6 +12,50 @@ public static class FileWorker
         List<FileChecksum> checksums) =>
         new(usedAlgorithm, info.FullName, checksums.ToArray());
 
+    public static void SaveMemento(string location, MementoFile file)
+    {
+        Stream fileStream;
+        try
+        {
+            fileStream = new FileStream(location, FileMode.OpenOrCreate, FileAccess.Write);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"Error occured while trying to write to file! Error: {e.Message}");
+
+            return;
+        }
+
+        SaveMemento(fileStream, file);
+
+        fileStream.Close();
+    }
+
+    public static void SaveMemento(Stream location, MementoFile file) => MessagePackSerializer.Serialize(location, file);
+
+    public static MementoFile? LoadMemento(string location)
+    {
+        Stream fileStream;
+        try
+        {
+            fileStream = new FileStream(location, FileMode.Open, FileAccess.Read);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"Error occured while trying to write to file! Error: {e.Message}");
+
+            return null;
+        }
+
+        var deserializedFile = LoadMemento(fileStream);
+
+        fileStream.Close();
+
+        return deserializedFile;
+    }
+
+    public static MementoFile LoadMemento(Stream location) => MessagePackSerializer.Deserialize<MementoFile>(location);
+
     public static void SaveFile(string location, SavedFile file)
     {
         Stream fileStream;

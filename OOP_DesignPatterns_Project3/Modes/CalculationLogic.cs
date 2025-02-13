@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿using System.Net.Mime;
+using System.Runtime.InteropServices;
+using System.Text;
 
 using Lnk;
 
@@ -18,8 +20,10 @@ public sealed class CalculationLogic : IOperationLogic
     private readonly ReportTypes m_format;
     private readonly bool m_shouldOutput;
     private bool m_shouldExit = false;
+    private bool m_paused = false;
 
-    private readonly List<string> m_visited = [];
+    private readonly Dictionary<string, bool> m_visited = [];
+    private readonly List<FileChecksum> m_checksums = [];
 
     public CalculationLogic(FileSystemInfo path, Algorithms.Algorithms algorithm,
         ReportTypes format, bool shouldOutput = true)
@@ -40,44 +44,157 @@ public sealed class CalculationLogic : IOperationLogic
 
         EventMaster.Bind(EventMaster.EVENT_ID_EXIT,
             new EventListener($"{EventMaster.EVENT_ID_EXIT}.calculationLogic", ExitListener));
+
+        EventMaster.Bind(EventMaster.EVENT_ID_PAUSE,
+            new EventListener($"{EventMaster.EVENT_ID_PAUSE}.calculationLogic", PauseListener));
     }
 
     private void ExitListener(IEvent @event) => m_shouldExit = true;
+
+    private void PauseListener(IEvent @event)
+    {
+        m_paused = !m_paused;
+
+        if (m_paused)
+        {
+            var file = new MementoFile(m_checksums.ToArray(),
+                m_visited.Where(x => !x.Value)
+                    .Select(x => x.Key).ToArray(), m_path.FullName);
+
+            FileWorker.SaveMemento("./memento.dat", file);
+        }
+        else
+        {
+            MementoFile? file = FileWorker.LoadMemento("./memento.dat");
+            if (file is null)
+            {
+                if(m_shouldOutput)
+                    Console.WriteLine("\nThere was an error reading file!");
+                
+                return;
+            }
+
+            if (m_path.FullName != file.StartDirectory)
+            {
+                if(m_shouldOutput)
+                    Console.WriteLine("\nThe restore cannot complete! Incompatible folders!");
+                
+                return;
+            }
+            
+            m_checksums.Clear();
+            m_checksums.AddRange(file.Finished);
+
+            foreach (var finished in m_checksums)
+            {
+                if(m_visited.ContainsKey(finished.Path))
+                    m_visited[finished.Path] = true;
+            }
+            
+            foreach (var notFinished in file.NotFinished)
+            {
+                if(m_visited.ContainsKey(notFinished))
+                    m_visited[notFinished] = false;
+            }
+        }
+    }
 
     public void Start() => StartInMemory().Wait();
 
     public async Task<List<FileChecksum>> StartInMemory(bool shouldCallForExit = true, bool shouldSaveFile = true)
     {
-        List<FileChecksum> checksums = [];
+        CacheEntries();
 
-        switch (m_path)
-        {
-            case DirectoryInfo di:
-            {
-                PerformChecksumOnFiles(di, checksums);
-
-                foreach (var dir in di.GetDirectories())
-                    PerformChecksumOnDirectory(dir, checksums);
-
-                break;
-            }
-            case FileInfo fi:
-                PerformCalculationOnFile(fi, checksums);
-
-                break;
-        }
+        CalculateChecksums(m_checksums);
 
         if (shouldSaveFile)
             FileWorker.SaveFile(new FileInfo($"{Directory.GetCurrentDirectory()}/checksum.dat").FullName,
-                FileWorker.CreateSavedFile(m_path, m_usedAlgorithm, checksums));
+                FileWorker.CreateSavedFile(m_path, m_usedAlgorithm, m_checksums));
 
         if (m_shouldOutput)
-            GenerateReport(checksums);
+            GenerateReport(m_checksums);
 
         if (shouldCallForExit)
             EventMaster.Invoke(EventMaster.EVENT_ID_EXIT_CONFIRM, new EmptyEvent());
 
-        return await Task.FromResult(checksums);
+        return await Task.FromResult(m_checksums);
+    }
+
+    private void CalculateChecksums(List<FileChecksum> checksums)
+    {
+        foreach (var file in m_visited.Keys)
+        {
+            PerformCalculationOnFile(new FileInfo(file), checksums);
+
+            if (m_paused)
+            {
+                while (m_paused)
+                {
+                    ConsoleInput.CheckForInput();
+                }
+                PerformCalculationOnFile(new FileInfo(file), checksums);
+            }
+        }
+    }
+
+    private void CacheEntries()
+    {
+        m_visited.Clear();
+
+        switch (m_path)
+        {
+            case FileInfo fi:
+                m_visited.Add(fi.FullName, false);
+
+                break;
+            case DirectoryInfo di:
+            {
+                FindAllDirs(di);
+
+                break;
+            }
+        }
+    }
+
+    private void FindAllDirs(DirectoryInfo di)
+    {
+        foreach (var fi in di.GetFiles())
+            FindAllFiles(fi);
+
+        foreach (var dir in di.GetDirectories())
+            FindAllDirs(dir);
+    }
+
+    private void FindAllFiles(FileInfo file)
+    {
+        ref var entry = ref
+            CollectionsMarshal.GetValueRefOrAddDefault(m_visited, file.FullName, out bool exists);
+
+        if (exists)
+            return;
+
+        entry = false;
+
+        FileSystemInfo? fsi = null;
+        if (file.Attributes.HasFlag(FileAttributes.ReparsePoint)) //symlink
+            fsi = ResolveSymlink(file);
+        else if (file.Extension.EndsWith(".lnk")) //Windows Shortcut
+            fsi = ResolveWindowsShortcut(file);
+
+        switch (fsi)
+        {
+            case FileInfo fi:
+                ref var entry2 = ref
+                    CollectionsMarshal.GetValueRefOrAddDefault(m_visited, fi.FullName, out bool _);
+
+                entry2 = false;
+
+                break;
+            case DirectoryInfo di1:
+                FindAllDirs(di1);
+
+                return;
+        }
     }
 
     private void GenerateReport(List<FileChecksum> checksums)
@@ -92,91 +209,15 @@ public sealed class CalculationLogic : IOperationLogic
         Console.WriteLine($"\nReport:\n\n{report.CreateReport(checksums.ToArray())}");
     }
 
-    private void PerformChecksumOnDirectory(DirectoryInfo di, List<FileChecksum> checksums)
-    {
-        foreach (var dir in di.GetDirectories())
-        {
-            if (m_shouldExit)
-                break;
-
-            PerformChecksumOnFiles(dir, checksums);
-
-            var subDirs = dir.GetDirectories();
-            if (subDirs.Length > 0)
-                PerformChecksumOnDirectory(dir, checksums);
-        }
-    }
-
-    private void PerformChecksumOnFiles(DirectoryInfo di, List<FileChecksum> checksums)
-    {
-        FileInfo[] files;
-
-        try
-        {
-            files = di.GetFiles();
-        }
-        catch (Exception e)
-        {
-            return;
-        }
-
-        foreach (var file in files)
-        {
-            ConsoleInput.CheckForInput();
-
-            PerformCalculationOnFile(file, checksums);
-
-            if (m_shouldExit)
-                break;
-
-            ConsoleInput.CheckForInput();
-        }
-    }
-
     private void PerformCalculationOnFile(FileInfo file, List<FileChecksum> checksums)
     {
         ConsoleInput.CheckForInput();
 
-        if (m_visited.Contains(file.FullName))
+        if (m_visited[file.FullName])
             return;
 
         if (m_shouldOutput)
             Console.WriteLine($"Processing: {file.FullName}");
-
-        if (file.Attributes.HasFlag(FileAttributes.ReparsePoint)) //symlink
-        {
-            m_visited.Add(file.FullName);
-            var fsi = ResolveSymlink(file);
-
-            switch (fsi)
-            {
-                case FileInfo fi:
-                    file = fi;
-
-                    break;
-                case DirectoryInfo di:
-                    PerformChecksumOnFiles(di, checksums);
-
-                    return;
-            }
-        }
-        else if (file.Extension.EndsWith(".lnk")) //Windows Shortcut
-        {
-            m_visited.Add(file.FullName);
-            var fsi = ResolveWindowsShortcut(file);
-
-            switch (fsi)
-            {
-                case FileInfo fi:
-                    file = fi;
-
-                    break;
-                case DirectoryInfo di:
-                    PerformChecksumOnDirectory(di, checksums);
-
-                    return;
-            }
-        }
 
         FileType type = IsBinaryFile(file) ? FileType.Binary : FileType.Other;
 
@@ -205,7 +246,7 @@ public sealed class CalculationLogic : IOperationLogic
             return;
         }
 
-        m_visited.Add(file.FullName);
+        m_visited[file.FullName] = true;
 
         if (m_shouldOutput)
             Console.WriteLine("\t\tOK!\n");
