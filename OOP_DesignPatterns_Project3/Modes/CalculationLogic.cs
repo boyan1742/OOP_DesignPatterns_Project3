@@ -19,6 +19,8 @@ public sealed class CalculationLogic : IOperationLogic
     private readonly bool m_shouldOutput;
     private bool m_shouldExit = false;
 
+    private readonly List<string> m_visited = [];
+
     public CalculationLogic(FileSystemInfo path, Algorithms.Algorithms algorithm,
         ReportTypes format, bool shouldOutput = true)
     {
@@ -124,12 +126,16 @@ public sealed class CalculationLogic : IOperationLogic
     private void PerformCalculationOnFile(FileInfo file, List<FileChecksum> checksums)
     {
         ConsoleInput.CheckForInput();
+        
+        if(m_visited.Contains(file.FullName))
+            return;
 
         if (m_shouldOutput)
             Console.WriteLine($"Processing: {file.FullName}");
 
         if (file.Attributes.HasFlag(FileAttributes.ReparsePoint)) //symlink
         {
+            m_visited.Add(file.FullName);
             var fsi = ResolveSymlink(file);
 
             switch (fsi)
@@ -146,6 +152,7 @@ public sealed class CalculationLogic : IOperationLogic
         }
         else if (file.Extension.EndsWith(".lnk")) //Windows Shortcut
         {
+            m_visited.Add(file.FullName);
             var fsi = ResolveWindowsShortcut(file);
 
             switch (fsi)
@@ -156,6 +163,9 @@ public sealed class CalculationLogic : IOperationLogic
                     break;
                 case DirectoryInfo di:
                     PerformChecksumOnFiles(di, checksums);
+
+                    foreach (var dir in di.GetDirectories()) 
+                        PerformChecksumOnFiles(dir, checksums);
 
                     return;
             }
@@ -187,6 +197,8 @@ public sealed class CalculationLogic : IOperationLogic
 
             return;
         }
+        
+        m_visited.Add(file.FullName);
 
         if (m_shouldOutput)
             Console.WriteLine("\t\tOK!\n");
