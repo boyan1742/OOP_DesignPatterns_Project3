@@ -57,12 +57,7 @@ public sealed class CalculationLogic : IOperationLogic
                 PerformChecksumOnFiles(di, checksums);
 
                 foreach (var dir in di.GetDirectories())
-                {
-                    if (m_shouldExit)
-                        break;
-
-                    PerformChecksumOnFiles(dir, checksums);
-                }
+                    PerformChecksumOnDirectory(dir, checksums);
 
                 break;
             }
@@ -97,6 +92,21 @@ public sealed class CalculationLogic : IOperationLogic
         Console.WriteLine($"\nReport:\n\n{report.CreateReport(checksums.ToArray())}");
     }
 
+    private void PerformChecksumOnDirectory(DirectoryInfo di, List<FileChecksum> checksums)
+    {
+        foreach (var dir in di.GetDirectories())
+        {
+            if (m_shouldExit)
+                break;
+
+            PerformChecksumOnFiles(dir, checksums);
+
+            var subDirs = dir.GetDirectories();
+            if (subDirs.Length > 0)
+                PerformChecksumOnDirectory(dir, checksums);
+        }
+    }
+
     private void PerformChecksumOnFiles(DirectoryInfo di, List<FileChecksum> checksums)
     {
         FileInfo[] files;
@@ -126,8 +136,8 @@ public sealed class CalculationLogic : IOperationLogic
     private void PerformCalculationOnFile(FileInfo file, List<FileChecksum> checksums)
     {
         ConsoleInput.CheckForInput();
-        
-        if(m_visited.Contains(file.FullName))
+
+        if (m_visited.Contains(file.FullName))
             return;
 
         if (m_shouldOutput)
@@ -162,10 +172,7 @@ public sealed class CalculationLogic : IOperationLogic
 
                     break;
                 case DirectoryInfo di:
-                    PerformChecksumOnFiles(di, checksums);
-
-                    foreach (var dir in di.GetDirectories()) 
-                        PerformChecksumOnFiles(dir, checksums);
+                    PerformChecksumOnDirectory(di, checksums);
 
                     return;
             }
@@ -197,7 +204,7 @@ public sealed class CalculationLogic : IOperationLogic
 
             return;
         }
-        
+
         m_visited.Add(file.FullName);
 
         if (m_shouldOutput)
@@ -211,12 +218,12 @@ public sealed class CalculationLogic : IOperationLogic
         try
         {
             var lnkFile = Lnk.Lnk.LoadFile(file.FullName);
-            
+
             string targetPath = lnkFile.LocalPath;
 
             if (string.IsNullOrEmpty(targetPath))
                 return file;
-            
+
             if (File.Exists(targetPath))
             {
                 return new FileInfo(targetPath);
