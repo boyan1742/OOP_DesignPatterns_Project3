@@ -19,8 +19,8 @@ public sealed class CalculationLogic : IOperationLogic
         m_algorithm = algorithm switch
         {
             Algorithms.Algorithms.MD5 => new MD5Algorithm(nameof(CalculationLogic)),
-            Algorithms.Algorithms.SHA1 => new MD5Algorithm(nameof(CalculationLogic)), //TODO: Change
-            Algorithms.Algorithms.SHA2 => new MD5Algorithm(nameof(CalculationLogic)), //TODO: Change
+            Algorithms.Algorithms.SHA1 => new SHA1Algorithm(nameof(CalculationLogic)),
+            Algorithms.Algorithms.SHA256 => new SHA256Algorithm(nameof(CalculationLogic)),
             _ => throw new ArgumentOutOfRangeException(nameof(algorithm), algorithm, null)
         };
 

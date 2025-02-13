@@ -5,5 +5,5 @@ public enum Algorithms
     None,
     MD5,
     SHA1,
-    SHA2
+    SHA256
 }
