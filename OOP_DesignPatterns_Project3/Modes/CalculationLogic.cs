@@ -1,4 +1,8 @@
-﻿using OOP_DesignPatterns_Project3.Algorithms;
+﻿using System.Text;
+
+using Lnk;
+
+using OOP_DesignPatterns_Project3.Algorithms;
 using OOP_DesignPatterns_Project3.Data;
 using OOP_DesignPatterns_Project3.Events;
 using OOP_DesignPatterns_Project3.Reports;
@@ -38,10 +42,7 @@ public sealed class CalculationLogic : IOperationLogic
 
     private void ExitListener(IEvent @event) => m_shouldExit = true;
 
-    public void Start()
-    {
-        StartInMemory();
-    }
+    public void Start() => StartInMemory().Wait();
 
     public async Task<List<FileChecksum>> StartInMemory(bool shouldCallForExit = true, bool shouldSaveFile = true)
     {
@@ -127,6 +128,39 @@ public sealed class CalculationLogic : IOperationLogic
         if (m_shouldOutput)
             Console.WriteLine($"Processing: {file.FullName}");
 
+        if (file.Attributes.HasFlag(FileAttributes.ReparsePoint)) //symlink
+        {
+            var fsi = ResolveSymlink(file);
+
+            switch (fsi)
+            {
+                case FileInfo fi:
+                    file = fi;
+
+                    break;
+                case DirectoryInfo di:
+                    PerformChecksumOnFiles(di, checksums);
+
+                    return;
+            }
+        }
+        else if (file.Extension.EndsWith(".lnk")) //Windows Shortcut
+        {
+            var fsi = ResolveWindowsShortcut(file);
+
+            switch (fsi)
+            {
+                case FileInfo fi:
+                    file = fi;
+
+                    break;
+                case DirectoryInfo di:
+                    PerformChecksumOnFiles(di, checksums);
+
+                    return;
+            }
+        }
+
         FileType type = IsBinaryFile(file) ? FileType.Binary : FileType.Other;
 
         Stream stream;
@@ -158,6 +192,49 @@ public sealed class CalculationLogic : IOperationLogic
             Console.WriteLine("\t\tOK!\n");
 
         checksums.Add(new FileChecksum(file.FullName, type, checksum));
+    }
+
+    private FileSystemInfo ResolveWindowsShortcut(FileInfo file)
+    {
+        try
+        {
+            var lnkFile = Lnk.Lnk.LoadFile(file.FullName);
+            
+            string targetPath = lnkFile.LocalPath;
+
+            if (string.IsNullOrEmpty(targetPath))
+                return file;
+            
+            if (File.Exists(targetPath))
+            {
+                return new FileInfo(targetPath);
+            }
+
+            if (Directory.Exists(targetPath))
+            {
+                return new DirectoryInfo(targetPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"\nError resolving shortcut: {ex.Message}\n");
+        }
+
+        return file;
+    }
+
+    private FileSystemInfo ResolveSymlink(FileInfo file)
+    {
+        try
+        {
+            return file.ResolveLinkTarget(true) ?? file;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"\nError resolving symbolic link: {ex.Message}\n");
+        }
+
+        return file;
     }
 
     private static bool IsBinaryFile(FileInfo file)
