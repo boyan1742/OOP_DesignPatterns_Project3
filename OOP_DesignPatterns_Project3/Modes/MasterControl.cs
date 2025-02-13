@@ -1,12 +1,12 @@
 ﻿using OOP_DesignPatterns_Project3.Events;
 
-namespace OOP_DesignPatterns_Project3;
+namespace OOP_DesignPatterns_Project3.Modes;
 
 public sealed class MasterControl
 {
     private readonly IOperationLogic m_operationLogic;
 
-    public MasterControl(DirectoryInfo path, Algorithms.Algorithms algorithm, FileInfo checksums)
+    public MasterControl(FileSystemInfo path, Algorithms.Algorithms algorithm, FileInfo checksums)
     {
         m_operationLogic = algorithm == Algorithms.Algorithms.None
             ? new VerificationLogic(path, checksums)

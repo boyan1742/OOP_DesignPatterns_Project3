@@ -1,8 +1,8 @@
-﻿namespace OOP_DesignPatterns_Project3;
+﻿namespace OOP_DesignPatterns_Project3.Modes;
 
 public sealed class VerificationLogic : IOperationLogic
 {
-    public VerificationLogic(DirectoryInfo path, FileInfo checksums)
+    public VerificationLogic(FileSystemInfo path, FileInfo checksums)
     {
     }
 

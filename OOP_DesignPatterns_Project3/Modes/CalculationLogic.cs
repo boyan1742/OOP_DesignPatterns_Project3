@@ -3,17 +3,19 @@ using OOP_DesignPatterns_Project3.Data;
 using OOP_DesignPatterns_Project3.Events;
 using OOP_DesignPatterns_Project3.Utils;
 
-namespace OOP_DesignPatterns_Project3;
+namespace OOP_DesignPatterns_Project3.Modes;
 
 public sealed class CalculationLogic : IOperationLogic
 {
-    private readonly DirectoryInfo m_path;
+    private readonly FileSystemInfo m_path;
+    private readonly Algorithms.Algorithms m_usedAlgorithm;
     private readonly IChecksumAlgorithm m_algorithm;
     private bool m_shouldExit = false;
 
-    public CalculationLogic(DirectoryInfo path, Algorithms.Algorithms algorithm)
+    public CalculationLogic(FileSystemInfo path, Algorithms.Algorithms algorithm)
     {
         m_path = path;
+        m_usedAlgorithm = algorithm;
         m_algorithm = algorithm switch
         {
             Algorithms.Algorithms.MD5 => new MD5Algorithm(nameof(CalculationLogic)),
@@ -31,22 +33,37 @@ public sealed class CalculationLogic : IOperationLogic
     public void Start()
     {
         List<FileChecksum> checksums = [];
-        checksums.AddRange(PerformChecksumOnFiles(m_path));
 
-        foreach (var dir in m_path.GetDirectories())
+        switch (m_path)
         {
-            if (m_shouldExit)
+            case DirectoryInfo di:
+            {
+                PerformChecksumOnFiles(di, checksums);
+
+                foreach (var dir in di.GetDirectories())
+                {
+                    if (m_shouldExit)
+                        break;
+
+                    PerformChecksumOnFiles(dir, checksums);
+                }
+
                 break;
-            
-            checksums.AddRange(PerformChecksumOnFiles(dir));
+            }
+            case FileInfo fi:
+                PerformCalculationOnFile(fi, checksums);
+
+                break;
         }
+
+        FileWorker.SaveFile(new FileInfo($"{Directory.GetCurrentDirectory()}/checksum.dat").FullName,
+            FileWorker.CreateSavedFile(m_path, m_usedAlgorithm, checksums));
 
         EventMaster.Invoke(EventMaster.EVENT_ID_EXIT_CONFIRM, new EmptyEvent());
     }
 
-    private List<FileChecksum> PerformChecksumOnFiles(DirectoryInfo di)
+    private void PerformChecksumOnFiles(DirectoryInfo di, List<FileChecksum> checksums)
     {
-        List<FileChecksum> checksums = [];
         FileInfo[] files;
 
         try
@@ -55,36 +72,42 @@ public sealed class CalculationLogic : IOperationLogic
         }
         catch (Exception e)
         {
-            return checksums;
+            return;
         }
 
         foreach (var file in files)
         {
-            ConsoleInput.CheckForInput();
-            
-            Console.WriteLine($"Processing: {file.FullName}");
-
-            FileType type = IsBinaryFile(file) ? FileType.Binary : FileType.Other;
-            string checksum = m_algorithm.PerformAlgorithm(file.FullName);
-
-            if (m_shouldExit)
+            if (PerformCalculationOnFile(file, checksums))
                 break;
+        }
+    }
 
-            if (checksum.Length == 0) //skip if there was an error creating the hash.
-            {
-                Console.WriteLine("\t\tError!\n");
+    private bool PerformCalculationOnFile(FileInfo file, List<FileChecksum> checksums)
+    {
+        ConsoleInput.CheckForInput();
 
-                continue;
-            }
+        Console.WriteLine($"Processing: {file.FullName}");
 
-            Console.WriteLine("\t\tOK!\n");
+        FileType type = IsBinaryFile(file) ? FileType.Binary : FileType.Other;
+        string checksum = m_algorithm.PerformAlgorithm(file.FullName);
 
-            checksums.Add(new FileChecksum(file.FullName, type, checksum));
+        if (m_shouldExit)
+            return true;
 
-            ConsoleInput.CheckForInput();
+        if (checksum.Length == 0) //skip if there was an error creating the hash.
+        {
+            Console.WriteLine("\t\tError!\n");
+
+            return false;
         }
 
-        return checksums;
+        Console.WriteLine("\t\tOK!\n");
+
+        checksums.Add(new FileChecksum(file.FullName, type, checksum));
+
+        ConsoleInput.CheckForInput();
+
+        return false;
     }
 
     private static bool IsBinaryFile(FileInfo file)
