@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using OOP_DesignPatterns_Project3.Data;
 using OOP_DesignPatterns_Project3.Events;
 using OOP_DesignPatterns_Project3.Modes;
+using OOP_DesignPatterns_Project3.Reports;
 
 namespace OOP_DesignPatterns_Project3;
 
@@ -17,6 +18,7 @@ class Program
     private static FileSystemInfo? m_checksumPath = null;
     private static Algorithms.Algorithms? m_checksumAlgorithm = null;
     private static FileInfo? m_checksumFile = null;
+    private static ReportTypes? m_reportType = null;
 
     private static int Main(string[] args)
     {
@@ -43,7 +45,8 @@ class Program
         {
             control = new MasterControl(m_checksumPath ?? new DirectoryInfo(Directory.GetCurrentDirectory()),
                 m_checksumAlgorithm ?? Algorithms.Algorithms.None,
-                m_checksumFile ?? new FileInfo(Assembly.GetExecutingAssembly().Location));
+                m_checksumFile ?? new FileInfo(Assembly.GetExecutingAssembly().Location), 
+                m_reportType ?? ReportTypes.Text);
         }
         catch (Exception e)
         {
@@ -77,13 +80,20 @@ class Program
             description: "The file containing all checksums of the files scanned previously."
         );
 
+        var formatOption = new Option<ReportTypes?>(
+            name: "--format",
+            description: "The file containing all checksums of the files scanned previously.",
+            getDefaultValue: () => ReportTypes.Text
+        );
+
         var rootCommand = new RootCommand("File checksum application.");
 
         rootCommand.AddOption(pathOption);
         rootCommand.AddOption(algorithmOption);
         rootCommand.AddOption(checksumsOption);
+        rootCommand.AddOption(formatOption);
 
-        rootCommand.SetHandler((path, algorithm, checksums) =>
+        rootCommand.SetHandler((path, algorithm, checksums, format) =>
         {
             if (algorithm != null && checksums != null)
             {
@@ -122,7 +132,8 @@ class Program
             }
 
             m_checksumPath = path;
-        }, pathOption, algorithmOption, checksumsOption);
+            m_reportType = format ?? ReportTypes.Text;
+        }, pathOption, algorithmOption, checksumsOption, formatOption);
 
         return rootCommand;
     }

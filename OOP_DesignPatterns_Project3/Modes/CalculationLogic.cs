@@ -1,6 +1,7 @@
 ﻿using OOP_DesignPatterns_Project3.Algorithms;
 using OOP_DesignPatterns_Project3.Data;
 using OOP_DesignPatterns_Project3.Events;
+using OOP_DesignPatterns_Project3.Reports;
 using OOP_DesignPatterns_Project3.Utils;
 
 namespace OOP_DesignPatterns_Project3.Modes;
@@ -10,12 +11,14 @@ public sealed class CalculationLogic : IOperationLogic
     private readonly FileSystemInfo m_path;
     private readonly Algorithms.Algorithms m_usedAlgorithm;
     private readonly IChecksumAlgorithm m_algorithm;
+    private readonly ReportTypes m_format;
     private bool m_shouldExit = false;
 
-    public CalculationLogic(FileSystemInfo path, Algorithms.Algorithms algorithm)
+    public CalculationLogic(FileSystemInfo path, Algorithms.Algorithms algorithm, ReportTypes format)
     {
         m_path = path;
         m_usedAlgorithm = algorithm;
+        m_format = format;
         m_algorithm = algorithm switch
         {
             Algorithms.Algorithms.MD5 => new MD5Algorithm(nameof(CalculationLogic)),
@@ -60,8 +63,22 @@ public sealed class CalculationLogic : IOperationLogic
 
         FileWorker.SaveFile(new FileInfo($"{Directory.GetCurrentDirectory()}/checksum.dat").FullName,
             FileWorker.CreateSavedFile(m_path, m_usedAlgorithm, checksums));
+        
+        GenerateReport(checksums);
 
         EventMaster.Invoke(EventMaster.EVENT_ID_EXIT_CONFIRM, new EmptyEvent());
+    }
+
+    private void GenerateReport(List<FileChecksum> checksums)
+    {
+        IReport report = m_format switch
+        {
+            ReportTypes.Text => new TextReport(),
+            ReportTypes.Json => new JsonReport(),
+            _ => new TextReport()
+        };
+
+        Console.WriteLine($"\nReport:\n\n{report.CreateReport(checksums.ToArray())}");
     }
 
     private void PerformChecksumOnFiles(DirectoryInfo di, List<FileChecksum> checksums)
