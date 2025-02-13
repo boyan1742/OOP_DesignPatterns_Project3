@@ -148,7 +148,7 @@ class Program
 
     private static void UpdateFileProgressListener(IEvent @event)
     {
-        if (@event is not FileProgressUpdateEvent evn)
+        if (@event is not FileProgressUpdateEvent evn || m_checksumFile is not null)
             return;
 
         if ((DateTime.Now - m_lastInvocation).TotalMilliseconds < 0.5)

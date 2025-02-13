@@ -43,7 +43,7 @@ public static class FileWorker
         Stream fileStream;
         try
         {
-            fileStream = new FileStream(location, FileMode.Open, FileAccess.Write);
+            fileStream = new FileStream(location, FileMode.Open, FileAccess.Read);
         }
         catch (Exception e)
         {

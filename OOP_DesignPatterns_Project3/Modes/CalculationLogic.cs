@@ -12,13 +12,16 @@ public sealed class CalculationLogic : IOperationLogic
     private readonly Algorithms.Algorithms m_usedAlgorithm;
     private readonly IChecksumAlgorithm m_algorithm;
     private readonly ReportTypes m_format;
+    private readonly bool m_shouldOutput;
     private bool m_shouldExit = false;
 
-    public CalculationLogic(FileSystemInfo path, Algorithms.Algorithms algorithm, ReportTypes format)
+    public CalculationLogic(FileSystemInfo path, Algorithms.Algorithms algorithm,
+        ReportTypes format, bool shouldOutput = true)
     {
         m_path = path;
         m_usedAlgorithm = algorithm;
         m_format = format;
+        m_shouldOutput = shouldOutput;
         m_algorithm = algorithm switch
         {
             Algorithms.Algorithms.MD5 => new MD5Algorithm(nameof(CalculationLogic)),
@@ -26,7 +29,7 @@ public sealed class CalculationLogic : IOperationLogic
             Algorithms.Algorithms.SHA256 => new SHA256Algorithm(nameof(CalculationLogic)),
             _ => throw new ArgumentOutOfRangeException(nameof(algorithm), algorithm, null)
         };
-        
+
         m_algorithm.SetWaitForKeypress(true);
 
         EventMaster.Bind(EventMaster.EVENT_ID_EXIT,
@@ -36,6 +39,11 @@ public sealed class CalculationLogic : IOperationLogic
     private void ExitListener(IEvent @event) => m_shouldExit = true;
 
     public void Start()
+    {
+        StartInMemory();
+    }
+
+    public async Task<List<FileChecksum>> StartInMemory(bool shouldCallForExit = true, bool shouldSaveFile = true)
     {
         List<FileChecksum> checksums = [];
 
@@ -61,12 +69,17 @@ public sealed class CalculationLogic : IOperationLogic
                 break;
         }
 
-        FileWorker.SaveFile(new FileInfo($"{Directory.GetCurrentDirectory()}/checksum.dat").FullName,
-            FileWorker.CreateSavedFile(m_path, m_usedAlgorithm, checksums));
-        
-        GenerateReport(checksums);
+        if (shouldSaveFile)
+            FileWorker.SaveFile(new FileInfo($"{Directory.GetCurrentDirectory()}/checksum.dat").FullName,
+                FileWorker.CreateSavedFile(m_path, m_usedAlgorithm, checksums));
 
-        EventMaster.Invoke(EventMaster.EVENT_ID_EXIT_CONFIRM, new EmptyEvent());
+        if (m_shouldOutput)
+            GenerateReport(checksums);
+
+        if (shouldCallForExit)
+            EventMaster.Invoke(EventMaster.EVENT_ID_EXIT_CONFIRM, new EmptyEvent());
+
+        return await Task.FromResult(checksums);
     }
 
     private void GenerateReport(List<FileChecksum> checksums)
@@ -111,7 +124,8 @@ public sealed class CalculationLogic : IOperationLogic
     {
         ConsoleInput.CheckForInput();
 
-        Console.WriteLine($"Processing: {file.FullName}");
+        if (m_shouldOutput)
+            Console.WriteLine($"Processing: {file.FullName}");
 
         FileType type = IsBinaryFile(file) ? FileType.Binary : FileType.Other;
 
@@ -122,7 +136,8 @@ public sealed class CalculationLogic : IOperationLogic
         }
         catch (Exception e)
         {
-            Console.WriteLine($"\nError while opening file: `{file.FullName}`! Error: {e.Message}\n");
+            if (m_shouldOutput)
+                Console.WriteLine($"\nError while opening file: `{file.FullName}`! Error: {e.Message}\n");
 
             return;
         }
@@ -133,12 +148,14 @@ public sealed class CalculationLogic : IOperationLogic
 
         if (checksum.Length == 0) //skip if there was an error creating the hash.
         {
-            Console.WriteLine($"\nError while calculating the checksum for file: `{file.FullName}`!\n");
+            if (m_shouldOutput)
+                Console.WriteLine($"\nError while calculating the checksum for file: `{file.FullName}`!\n");
 
             return;
         }
 
-        Console.WriteLine("\t\tOK!\n");
+        if (m_shouldOutput)
+            Console.WriteLine("\t\tOK!\n");
 
         checksums.Add(new FileChecksum(file.FullName, type, checksum));
     }
