@@ -23,6 +23,8 @@ public sealed class CalculationLogic : IOperationLogic
             Algorithms.Algorithms.SHA256 => new SHA256Algorithm(nameof(CalculationLogic)),
             _ => throw new ArgumentOutOfRangeException(nameof(algorithm), algorithm, null)
         };
+        
+        m_algorithm.SetWaitForKeypress(true);
 
         EventMaster.Bind(EventMaster.EVENT_ID_EXIT,
             new EventListener($"{EventMaster.EVENT_ID_EXIT}.calculationLogic", ExitListener));
@@ -77,37 +79,51 @@ public sealed class CalculationLogic : IOperationLogic
 
         foreach (var file in files)
         {
-            if (PerformCalculationOnFile(file, checksums))
+            ConsoleInput.CheckForInput();
+
+            PerformCalculationOnFile(file, checksums);
+
+            if (m_shouldExit)
                 break;
+
+            ConsoleInput.CheckForInput();
         }
     }
 
-    private bool PerformCalculationOnFile(FileInfo file, List<FileChecksum> checksums)
+    private void PerformCalculationOnFile(FileInfo file, List<FileChecksum> checksums)
     {
         ConsoleInput.CheckForInput();
 
         Console.WriteLine($"Processing: {file.FullName}");
 
         FileType type = IsBinaryFile(file) ? FileType.Binary : FileType.Other;
-        string checksum = m_algorithm.PerformAlgorithm(file.FullName);
 
-        if (m_shouldExit)
-            return true;
+        Stream stream;
+        try
+        {
+            stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"\nError while opening file: `{file.FullName}`! Error: {e.Message}\n");
+
+            return;
+        }
+
+        string checksum = m_algorithm.PerformAlgorithm(stream);
+
+        stream.Close();
 
         if (checksum.Length == 0) //skip if there was an error creating the hash.
         {
-            Console.WriteLine("\t\tError!\n");
+            Console.WriteLine($"\nError while calculating the checksum for file: `{file.FullName}`!\n");
 
-            return false;
+            return;
         }
 
         Console.WriteLine("\t\tOK!\n");
 
         checksums.Add(new FileChecksum(file.FullName, type, checksum));
-
-        ConsoleInput.CheckForInput();
-
-        return false;
     }
 
     private static bool IsBinaryFile(FileInfo file)

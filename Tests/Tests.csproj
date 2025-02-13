@@ -20,4 +20,8 @@
         <Using Include="Xunit"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\OOP_DesignPatterns_Project3\OOP_DesignPatterns_Project3.csproj" />
+    </ItemGroup>
+
 </Project>

@@ -2,5 +2,6 @@
 
 public interface IChecksumAlgorithm
 {
-    string PerformAlgorithm(string filePath);
+    void SetWaitForKeypress(bool value);
+    string PerformAlgorithm(Stream fileStream);
 }

@@ -6,13 +6,31 @@ namespace OOP_DesignPatterns_Project3.Data;
 
 public static class FileWorker
 {
-    public static bool SaveBinary = true;
+    public static bool SaveBinary { get; set; } = true;
 
     public static SavedFile CreateSavedFile(FileSystemInfo info, Algorithms.Algorithms usedAlgorithm,
         List<FileChecksum> checksums) =>
         new(usedAlgorithm, info.FullName, checksums.ToArray());
 
     public static void SaveFile(string location, SavedFile file)
+    {
+        Stream fileStream;
+        try
+        {
+            fileStream = new FileStream(location, FileMode.OpenOrCreate, FileAccess.Write);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"Error occured while trying to write to file! Error: {e.Message}");
+
+            return;
+        }
+
+        SaveFile(fileStream, file);
+        fileStream.Close();
+    }
+
+    public static void SaveFile(Stream location, SavedFile file)
     {
         if (SaveBinary)
             SaveFileBinary(location, file);
@@ -21,53 +39,6 @@ public static class FileWorker
     }
 
     public static SavedFile? LoadFile(string location)
-    {
-        if (SaveBinary)
-            return LoadFileBinary(location);
-        else
-            return LoadFileJson(location);
-    }
-
-    private static void SaveFileJson(string location, SavedFile file)
-    {
-        Stream fileStream;
-        try
-        {
-            fileStream = new FileStream(location, FileMode.OpenOrCreate, FileAccess.Write);
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"Error occured while trying to write to file! Error: {e.Message}");
-
-            return;
-        }
-
-        JsonSerializer.Serialize(fileStream, file, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        });
-        fileStream.Close();
-    }
-
-    private static void SaveFileBinary(string location, SavedFile file)
-    {
-        Stream fileStream;
-        try
-        {
-            fileStream = new FileStream(location, FileMode.OpenOrCreate, FileAccess.Write);
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"Error occured while trying to write to file! Error: {e.Message}");
-
-            return;
-        }
-
-        MessagePackSerializer.Serialize(fileStream, file);
-        fileStream.Close();
-    }
-
-    private static SavedFile? LoadFileJson(string location)
     {
         Stream fileStream;
         try
@@ -81,6 +52,28 @@ public static class FileWorker
             return null;
         }
 
+        SavedFile? file = LoadFile(fileStream);
+
+        return file;
+    }
+
+    public static SavedFile? LoadFile(Stream location) => SaveBinary ? LoadFileBinary(location) : LoadFileJson(location);
+
+    private static void SaveFileJson(Stream fileStream, SavedFile file)
+    {
+        JsonSerializer.Serialize(fileStream, file, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+    }
+
+    private static void SaveFileBinary(Stream fileStream, SavedFile file)
+    {
+        MessagePackSerializer.Serialize(fileStream, file);
+    }
+
+    private static SavedFile? LoadFileJson(Stream fileStream)
+    {
         SavedFile? file = null;
 
         try
@@ -92,25 +85,11 @@ public static class FileWorker
             Console.WriteLine($"Error occured when deserializing the checksum file! Error: {e.Message}");
         }
 
-        fileStream.Close();
-
         return file;
     }
 
-    private static SavedFile? LoadFileBinary(string location)
+    private static SavedFile? LoadFileBinary(Stream fileStream)
     {
-        Stream fileStream;
-        try
-        {
-            fileStream = new FileStream(location, FileMode.Open, FileAccess.Write);
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"Error occured while trying to write to file! Error: {e.Message}");
-
-            return null;
-        }
-
         SavedFile? file = null;
 
         try
@@ -121,8 +100,6 @@ public static class FileWorker
         {
             Console.WriteLine($"Error occured when deserializing the checksum file! Error: {e.Message}");
         }
-
-        fileStream.Close();
 
         return file;
     }
