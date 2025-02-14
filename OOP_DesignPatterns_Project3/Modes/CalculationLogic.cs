@@ -1,8 +1,4 @@
-﻿using System.Net.Mime;
-using System.Runtime.InteropServices;
-using System.Text;
-
-using Lnk;
+﻿using System.Runtime.InteropServices;
 
 using OOP_DesignPatterns_Project3.Algorithms;
 using OOP_DesignPatterns_Project3.Data;
@@ -103,6 +99,9 @@ public sealed class CalculationLogic : IOperationLogic
 
     public async Task<List<FileChecksum>> StartInMemory(bool shouldCallForExit = true, bool shouldSaveFile = true)
     {
+        if(m_shouldOutput)
+            Console.WriteLine("\nCaching entries!\n\n");
+        
         CacheEntries();
 
         CalculateChecksums(m_checksums);
@@ -122,6 +121,7 @@ public sealed class CalculationLogic : IOperationLogic
 
     private void CalculateChecksums(List<FileChecksum> checksums)
     {
+        long done = 0;
         foreach (var file in m_visited.Keys)
         {
             PerformCalculationOnFile(new FileInfo(file), checksums);
@@ -134,6 +134,12 @@ public sealed class CalculationLogic : IOperationLogic
                 }
                 PerformCalculationOnFile(new FileInfo(file), checksums);
             }
+
+            if (m_shouldExit)
+                break;
+
+            if (m_shouldOutput) 
+                Console.WriteLine($"\n{++done}/{m_visited.Count}");
         }
     }
 

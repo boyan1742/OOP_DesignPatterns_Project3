@@ -157,7 +157,11 @@ class Program
         if (m_lastUpdateProgress == evn.GetProgress())
             return;
 
-        Console.Write($" {evn.GetProgress()}%");
+        (int left, int top) = Console.GetCursorPosition();
+        Console.SetCursorPosition(0, top);
+        string progess = $" {evn.GetProgress()}%";
+        progess = progess.PadRight(left, ' ');
+        Console.Write(progess);
         m_lastUpdateProgress = evn.GetProgress();
         m_lastInvocation = DateTime.Now;
     }
